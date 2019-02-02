@@ -1,8 +1,8 @@
-import torch
-import torch.utils.data.dataloader as dataloader
-from torch.utils.data import Dataset as Dataset
 import os
+import torch
 import numpy as np
+from torch.utils.data import Dataset as Dataset
+import torch.utils.data.dataloader as dataloader
 
 SPEECH_DATA_PATH = './../Data'
 
@@ -66,7 +66,6 @@ class SpeechDataset(Dataset):
             torch.save(self.utteranceIndices, self.utteranceIndicesPath)
 
     def __len__(self):
-        #return 100
         return self.totalFrameCount
 
     def __getitem__(self, idx):

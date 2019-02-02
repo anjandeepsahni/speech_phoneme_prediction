@@ -1,14 +1,13 @@
-import torch
-import torch.nn as nn
-import numpy as np
 import os
+import csv
+import time
+import torch
+import numpy as np
+import torch.nn as nn
+import torch.optim as optim
 from dataset import SpeechDataset
 from model import SpeechClassifier
-import torch.optim as optim
 from torch.utils.data import DataLoader
-import time
-import tqdm as tqdm
-import csv
 
 MODEL_PATH = './../Models'
 TEST_RESULT_PATH = './../Results'
