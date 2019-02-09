@@ -22,6 +22,7 @@ DEFAULT_TEST_BATCH_SIZE = 256
 # Hyperparameters.
 LEARNING_RATE = 0.001
 LEARNING_RATE_STEP = 0.7
+FRAME_CONTEXT_RANGE = 5     # On each side.
 
 def save_test_results(predictions):
     predictions = list(predictions.cpu().numpy())
@@ -123,9 +124,9 @@ if __name__ == "__main__":
                         % (args.reload_model, args.model_path))
 
     # Instantiate speech dataset.
-    speechTrainDataset = SpeechDataset(mode='train')
-    speechTestDataset = SpeechDataset(mode='test')
-    speechValDataset = SpeechDataset(mode='dev')
+    speechTrainDataset = SpeechDataset(FRAME_CONTEXT_RANGE, mode='train')
+    speechTestDataset = SpeechDataset(FRAME_CONTEXT_RANGE, mode='test', )
+    speechValDataset = SpeechDataset(FRAME_CONTEXT_RANGE, mode='dev')
     train_loader = DataLoader(speechTrainDataset, batch_size=args.train_batch_size,
                                 shuffle=True, num_workers=8)
     test_loader = DataLoader(speechTestDataset, batch_size=args.test_batch_size,
@@ -133,7 +134,21 @@ if __name__ == "__main__":
     val_loader = DataLoader(speechValDataset, batch_size=args.train_batch_size,
                             shuffle=False, num_workers=8)
 
-    model = SpeechClassifier([40,160,320,640,640,320,240,138])
+    # Prepare list of sizes of layers.
+    model_size_list = []
+    model_input_size = ((FRAME_CONTEXT_RANGE*2 + 1)*40)
+    model_output_size = 138
+    model_size_list.append(model_input_size)
+    num_hidden_layers = 6   # Must be even.
+    multiplier_factor = [3,2,1,1,0.5,0.5]   # Same length as num_hidden_layers.
+    pre_layer_size = model_input_size
+    for i in multiplier_factor:
+        model_size_list.append(int(pre_layer_size * i))
+        pre_layer_size = int(pre_layer_size * i)
+    model_size_list.append(model_output_size)
+
+    #model = SpeechClassifier([40,160,320,640,640,320,240,138])
+    model = SpeechClassifier(model_size_list)
     criterion = nn.CrossEntropyLoss()
     print('='*20)
     print(model)

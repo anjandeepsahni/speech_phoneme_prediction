@@ -3,13 +3,15 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset as Dataset
 import torch.utils.data.dataloader as dataloader
+from bisect import bisect_left
 
 SPEECH_DATA_PATH = './../Data'
 
 class SpeechDataset(Dataset):
-    def __init__(self, mode='train'):
+    def __init__(self, frameContextLen, mode='train'):
         # Check for valid mode.
         self.mode = mode
+        self.frameContextLen = frameContextLen
         valid_modes = {'train', 'dev', 'test'}
         if self.mode not in valid_modes:
             raise ValueError("SpeechDataset Error: Mode must be one of %r." % valid_modes)
@@ -69,10 +71,49 @@ class SpeechDataset(Dataset):
         return self.totalFrameCount
 
     def __getitem__(self, idx):
-        if self.mode != 'test':
-            return (self.data[idx], self.labels[idx])
+        # Perform padding for frame context.
+        pos = bisect_left(self.utteranceIndices, idx)
+        zero_tensor = torch.zeros(self.data[idx].unsqueeze_(0).size())
+        # Calculate the utterance start index and end index.
+        firstUtteranceFrame = False
+        if self.utteranceIndices[pos] == idx:
+            firstUtteranceFrame = True
+            utteranceStartIdx = self.utteranceIndices[pos]
+            utteranceEndIdx = self.utteranceIndices[pos+1] - 1
         else:
-            return self.data[idx]
+            utteranceStartIdx = self.utteranceIndices[pos-1]
+            utteranceEndIdx = self.utteranceIndices[pos] - 1
+        res = self.data[idx].unsqueeze(0)
+        # Pre padding.
+        i = idx - 1     # First frame before current.
+        while((i >= utteranceStartIdx) and (res.size()[0] < (self.frameContextLen+1))):
+            res = torch.cat((self.data[i].unsqueeze_(0),res), 0)
+            i -= 1
+        # Check if still some pre padding required.
+        if ((res.size()[0] != (self.frameContextLen+1)) or firstUtteranceFrame):
+            if firstUtteranceFrame:
+                # Special case, for first utterance frame.
+                # Size() of res will return incorrect value since res is 1D.
+                numZeroPad = self.frameContextLen
+            else:
+                numZeroPad = self.frameContextLen + 1 - res.size()[0]
+            zeros_tensor = zero_tensor.repeat(numZeroPad,1)
+            res = torch.cat((zeros_tensor,res), 0)
+        # Post padding.
+        i = idx + 1     # First frame after current.
+        while((i <= utteranceEndIdx) and (res.size()[0] < (self.frameContextLen*2 + 1))):
+            res = torch.cat((res,self.data[i].unsqueeze_(0)), 0)
+            i += 1
+        # Check if still some post padding required.
+        if res.size()[0] != (self.frameContextLen*2 + 1):
+            numZeroPad = self.frameContextLen*2 + 1 - res.size()[0]
+            zeros_tensor = zero_tensor.repeat(numZeroPad,1)
+            res = torch.cat((res,zeros_tensor), 0)
+        # Return the padded frame.
+        if self.mode != 'test':
+            return (res, self.labels[idx])
+        else:
+            return res
 
     def loadRawData(self):
         if self.mode == 'train' or self.mode == 'dev':
