@@ -27,14 +27,14 @@ class SpeechDataset(Dataset):
                 if os.path.isfile(self.labelsTensorPath):
                     self.labels = torch.load(self.labelsTensorPath)
                 else:
-                    raise ValueError("SpeechDataset Error: Data tensor file found at \
-                        %s but labels tensor file missing at %s." % (self.dataTensorPath, self.labelsTensorPath))
+                    raise ValueError("SpeechDataset Error: Data tensor file found at %s but labels tensor file missing at %s." \
+                        % (self.dataTensorPath, self.labelsTensorPath))
             # Load remaining parameters.
             if os.path.isfile(self.utteranceIndicesPath):
                 self.utteranceIndices = torch.load(self.utteranceIndicesPath)
             else:
-                raise ValueError("SpeechDataset Error: Data tensor file found at \
-                    %s but utteranceIndices file missing at %s." % (self.dataTensorPath, self.utteranceIndicesPath))
+                raise ValueError("SpeechDataset Error: Data tensor file found at %s but utteranceIndices file missing at %s."\
+                    % (self.dataTensorPath, self.utteranceIndicesPath))
             self.totalFrameCount = self.data.size()[0]
         else:
             # Load the data and labels (labels = None for 'test' mode)
@@ -52,13 +52,13 @@ class SpeechDataset(Dataset):
                 self.totalFrameCount += train_data[i].shape[0]
             # Check data size is equal to total frame count.
             if self.data.size()[0] != self.totalFrameCount:
-                raise ValueError("SpeechDataset Error: Data tensor size %d \
-                                is not equal to total frame count %d." % (self.data.size()[0], self.totalFrameCount))
+                raise ValueError("SpeechDataset Error: Data tensor size %d is not equal to total frame count %d."\
+                                % (self.data.size()[0], self.totalFrameCount))
             # Check labels size is equal to total frame count.
             if self.mode != 'test':
                 if self.labels.size()[0] != self.totalFrameCount:
-                    raise ValueError("SpeechDataset Error: Labels tensor size %d \
-                                    is not equal to total frame count %d." % (self.labels.size()[0], self.totalFrameCount))
+                    raise ValueError("SpeechDataset Error: Labels tensor size %d is not equal to total frame count %d." \
+                                    % (self.labels.size()[0], self.totalFrameCount))
             # Dump data and labels tensor so we don't have to create again.
             torch.save(self.data, self.dataTensorPath)
             if self.mode != 'test':

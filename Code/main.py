@@ -2,6 +2,7 @@ import os
 import csv
 import time
 import torch
+import argparse
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
@@ -9,14 +10,25 @@ from dataset import SpeechDataset
 from model import SpeechClassifier
 from torch.utils.data import DataLoader
 
+# Paths
 MODEL_PATH = './../Models'
 TEST_RESULT_PATH = './../Results'
 
+# Defaults
+DEFAULT_RUN_MODE = 'train'
+DEFAULT_TRAIN_BATCH_SIZE = 256
+DEFAULT_TEST_BATCH_SIZE = 256
+
+# Hyperparameters.
+LEARNING_RATE = 0.001
+LEARNING_RATE_STEP = 0.7
+
 def save_test_results(predictions):
-    predictions = list(predictions.numpy())
+    predictions = list(predictions.cpu().numpy())
     predictions_count = list(range(len(predictions)))
     csv_output = [[i,j] for i,j in zip(predictions_count,predictions)]
-    result_file_path = os.path.join(TEST_RESULT_PATH, 'result_{}.csv'.format(time.strftime("%Y%m%d-%H%M%S")))
+    result_file_path = os.path.join(TEST_RESULT_PATH,\
+            'result_{}.csv'.format((str.split(str.split(args.model_path, '/')[-1], '.pt')[0])))
     with open(result_file_path, mode='w') as csv_file:
         csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         csv_writer.writerow(['id', 'label'])
@@ -90,45 +102,59 @@ def test_model(model, test_loader, device):
         end_time = time.time()
         print('\nTotal Test Predictions: %d Time: %d s' % (all_predictions.size()[0], end_time - start_time))
 
+def parse_args():
+    parser = argparse.ArgumentParser(description='Training/testing for Speech Classifier.')
+    parser.add_argument('--mode', type=str, choices=['train', 'test'], default=DEFAULT_RUN_MODE, help='\'train\' or \'test\' mode.')
+    parser.add_argument('--train_batch_size', type=int, default=DEFAULT_TRAIN_BATCH_SIZE, help='Training batch size.')
+    parser.add_argument('--test_batch_size', type=int, default=DEFAULT_TEST_BATCH_SIZE, help='Testing batch size.')
+    parser.add_argument('--reload_model', type=bool, default=False, help='True/false, if we have to reload a model.')
+    parser.add_argument('--model_path', type=str, help='Path to model to be reloaded.')
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    reload_model = True
-    testing_only = True
+    # Create arg parser.
+    args = parse_args()
+    print('='*20)
+    print('Input arguments:\n%s' % (args))
+
+    # Validate arguments.
+    if args.mode == 'test' and (not args.reload_model or args.model_path == None):
+        raise ValueError("Input Argument Error: Test mode specified but reload_model is %s and model_path is %s." \
+                        % (args.reload_model, args.model_path))
 
     # Instantiate speech dataset.
     speechTrainDataset = SpeechDataset(mode='train')
     speechTestDataset = SpeechDataset(mode='test')
     speechValDataset = SpeechDataset(mode='dev')
-    train_loader = DataLoader(speechTrainDataset, batch_size=500,
-                                shuffle=False, num_workers=4)
-    test_loader = DataLoader(speechTestDataset, batch_size=500,
-                                shuffle=False, num_workers=4)
-    val_loader = DataLoader(speechValDataset, batch_size=500,
-                            shuffle=False, num_workers=4)
+    train_loader = DataLoader(speechTrainDataset, batch_size=args.train_batch_size,
+                                shuffle=True, num_workers=8)
+    test_loader = DataLoader(speechTestDataset, batch_size=args.test_batch_size,
+                                shuffle=False, num_workers=8)
+    val_loader = DataLoader(speechValDataset, batch_size=args.train_batch_size,
+                            shuffle=False, num_workers=8)
 
-    model = SpeechClassifier()
+    model = SpeechClassifier([40,160,320,640,640,320,240,138])
     criterion = nn.CrossEntropyLoss()
     print('='*20)
     print(model)
 
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma = LEARNING_RATE_STEP)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Running on device = %s." % (device))
 
-    if reload_model:
-        # Find the list of all saved models.
-        model_list = [f for f in os.listdir(MODEL_PATH) if os.path.isfile(os.path.join(MODEL_PATH, f))]
-        if model_list:
-            # Load the last saved model.
-            model_path = os.path.join(MODEL_PATH, model_list[-1])
-            model.load_state_dict(torch.load(model_path))
+    if args.reload_model:
+        model.load_state_dict(torch.load(args.model_path))
+        print('Loaded model:', args.model_path)
 
-    n_epochs = 1
+    n_epochs = 20
     Train_loss = []
     Val_loss = []
     Val_acc = []
 
     print('='*20)
 
-    if not testing_only:
+    if args.mode == 'train':
         for i in range(n_epochs):
             print('Epoch: %d/%d' % (i+1,n_epochs))
             train_loss = train_model(model, train_loader, criterion, optimizer, device)
@@ -136,12 +162,12 @@ if __name__ == "__main__":
             Train_loss.append(train_loss)
             Val_loss.append(val_loss)
             Val_acc.append(val_acc)
+            # Checkpoint the model after each epoch.
+            finalValAcc = '%.3f'%(Val_acc[-1])
+            model_path = os.path.join(MODEL_PATH, 'model_{}_val_{}.pt'.format(time.strftime("%Y%m%d-%H%M%S"), finalValAcc))
+            torch.save(model.state_dict(), model_path)
             print('='*20)
-
-        # Save model parameters.
-        finalValAcc = '%.3f'%(Val_acc[-1])
-        model_path = os.path.join(MODEL_PATH, 'model_{}_val_{}.pt'.format(time.strftime("%Y%m%d-%H%M%S"), finalValAcc))
-        torch.save(model.state_dict(), model_path)
+            scheduler.step()
     else:
         # Only testing the model.
         test_model(model, test_loader, device)
