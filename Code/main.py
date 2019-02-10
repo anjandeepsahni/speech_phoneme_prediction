@@ -123,6 +123,10 @@ if __name__ == "__main__":
         raise ValueError("Input Argument Error: Test mode specified but reload_model is %s and model_path is %s." \
                         % (args.reload_model, args.model_path))
 
+    if (args.reload_model and (args.model_path == None)):
+        raise ValueError("Input Argument Error: Reload model specified true but model_path is %s." \
+                        % (args.model_path))
+
     # Instantiate speech dataset.
     speechTrainDataset = SpeechDataset(FRAME_CONTEXT_RANGE, mode='train')
     speechTestDataset = SpeechDataset(FRAME_CONTEXT_RANGE, mode='test', )
@@ -135,6 +139,7 @@ if __name__ == "__main__":
                             shuffle=False, num_workers=8)
 
     # Prepare list of sizes of layers.
+    '''
     model_size_list = []
     model_input_size = ((FRAME_CONTEXT_RANGE*2 + 1)*40)
     model_output_size = 138
@@ -146,7 +151,9 @@ if __name__ == "__main__":
         model_size_list.append(int(pre_layer_size * i))
         pre_layer_size = int(pre_layer_size * i)
     model_size_list.append(model_output_size)
+    '''
 
+    model_size_list = [440, 512, 1024, 1024, 512, 256, 138]
     #model = SpeechClassifier([40,160,320,640,640,320,240,138])
     model = SpeechClassifier(model_size_list)
     criterion = nn.CrossEntropyLoss()

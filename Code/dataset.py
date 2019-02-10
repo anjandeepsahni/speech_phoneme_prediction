@@ -76,10 +76,18 @@ class SpeechDataset(Dataset):
         zero_tensor = torch.zeros(self.data[idx].unsqueeze_(0).size())
         # Calculate the utterance start index and end index.
         firstUtteranceFrame = False
-        if self.utteranceIndices[pos] == idx:
+        if pos > (len(self.utteranceIndices) - 1):
+            # Last utterance.
+            utteranceStartIdx = self.utteranceIndices[pos-1]
+            utteranceEndIdx = self.data.size()[0] - 1
+        elif self.utteranceIndices[pos] == idx:
             firstUtteranceFrame = True
             utteranceStartIdx = self.utteranceIndices[pos]
-            utteranceEndIdx = self.utteranceIndices[pos+1] - 1
+            if pos == (len(self.utteranceIndices) - 1):
+                # Last utterance index.
+                utteranceEndIdx = self.data.size()[0] - 1
+            else:
+                utteranceEndIdx = self.utteranceIndices[pos+1] - 1
         else:
             utteranceStartIdx = self.utteranceIndices[pos-1]
             utteranceEndIdx = self.utteranceIndices[pos] - 1
