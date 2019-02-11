@@ -16,13 +16,14 @@ TEST_RESULT_PATH = './../Results'
 
 # Defaults
 DEFAULT_RUN_MODE = 'train'
-DEFAULT_TRAIN_BATCH_SIZE = 256
-DEFAULT_TEST_BATCH_SIZE = 256
+DEFAULT_TRAIN_BATCH_SIZE = 400
+DEFAULT_TEST_BATCH_SIZE = 400
 
 # Hyperparameters.
-LEARNING_RATE = 0.001
+#LEARNING_RATE = 0.001
+LEARNING_RATE = 0.002   #Trying batchnorm.
 LEARNING_RATE_STEP = 0.7
-FRAME_CONTEXT_RANGE = 5     # On each side.
+FRAME_CONTEXT_RANGE = 8     # On each side.
 
 def save_test_results(predictions):
     predictions = list(predictions.cpu().numpy())
@@ -153,7 +154,8 @@ if __name__ == "__main__":
     model_size_list.append(model_output_size)
     '''
 
-    model_size_list = [440, 512, 1024, 1024, 512, 256, 138]
+    #model_size_list = [440, 512, 1024, 1024, 512, 256, 138]    #Frame context = 5
+    model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]    #Frame context = 8
     #model = SpeechClassifier([40,160,320,640,640,320,240,138])
     model = SpeechClassifier(model_size_list)
     criterion = nn.CrossEntropyLoss()
@@ -169,7 +171,7 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load(args.model_path))
         print('Loaded model:', args.model_path)
 
-    n_epochs = 20
+    n_epochs = 50
     Train_loss = []
     Val_loss = []
     Val_acc = []
