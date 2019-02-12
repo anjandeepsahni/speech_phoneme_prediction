@@ -16,8 +16,8 @@ TEST_RESULT_PATH = './../Results'
 
 # Defaults
 DEFAULT_RUN_MODE = 'train'
-DEFAULT_TRAIN_BATCH_SIZE = 400
-DEFAULT_TEST_BATCH_SIZE = 400
+DEFAULT_TRAIN_BATCH_SIZE = 600
+DEFAULT_TEST_BATCH_SIZE = 200
 
 # Hyperparameters.
 #LEARNING_RATE = 0.001
@@ -155,7 +155,8 @@ if __name__ == "__main__":
     '''
 
     #model_size_list = [440, 512, 1024, 1024, 512, 256, 138]    #Frame context = 5
-    model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]    #Frame context = 8
+    #model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]    #Frame context = 8
+    model_size_list = [680, 750, 800, 800, 800, 800, 650, 400, 300, 200, 138]    #Frame context = 8
     #model = SpeechClassifier([40,160,320,640,640,320,240,138])
     model = SpeechClassifier(model_size_list)
     criterion = nn.CrossEntropyLoss()

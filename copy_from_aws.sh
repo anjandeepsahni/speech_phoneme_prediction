@@ -1,1 +1,1 @@
-scp -v -i "~/Documents/Do Not Touch/aws_key.pem" ubuntu@ec2-18-219-210-36.us-east-2.compute.amazonaws.com:~/sahni/HW1-Part2/Results/result_model_20190210-050434_val_61.011.csv "/Users/sahni/Documents/Code/github_repos/CMUCourseWork/11785/HW1-Part2/Results/"
+scp -v -i "~/Documents/Do Not Touch/aws_key.pem" ubuntu@ec2-18-221-198-162.us-east-2.compute.amazonaws.com:~/sahni/HW1-Part2/Results/result_model_20190212-000105_val_65.198.csv "/Users/sahni/Documents/Code/github_repos/CMUCourseWork/11785/HW1-Part2/Results/"

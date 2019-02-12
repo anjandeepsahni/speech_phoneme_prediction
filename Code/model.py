@@ -9,9 +9,10 @@ class SpeechClassifier(nn.Module):
         self.size_list = size_list
         for i in range(len(size_list) - 2):
             layers.append(nn.Linear(size_list[i],size_list[i+1]))
-            if i < 2: #Batchnorm in first two hidden layers.
-                layers.append(nn.BatchNorm1d(size_list[i+1]))
-                m = nn.BatchNorm1d(100)
+            #if ((i%2) == 0): #Batchnorm in first two hidden layers.
+            layers.append(nn.BatchNorm1d(size_list[i+1]))
+            #else:
+            #    layers.append(nn.Dropout())
             layers.append(nn.LeakyReLU())
         layers.append(nn.Linear(size_list[-2], size_list[-1]))
         self.net = nn.Sequential(*layers)
