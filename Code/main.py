@@ -23,7 +23,7 @@ DEFAULT_TEST_BATCH_SIZE = 200
 #LEARNING_RATE = 0.001
 LEARNING_RATE = 0.002   #Trying batchnorm.
 LEARNING_RATE_STEP = 0.7
-FRAME_CONTEXT_RANGE = 8     # On each side.
+FRAME_CONTEXT_RANGE = 12     # On each side.
 
 def save_test_results(predictions):
     predictions = list(predictions.cpu().numpy())
@@ -139,26 +139,15 @@ if __name__ == "__main__":
     val_loader = DataLoader(speechValDataset, batch_size=args.train_batch_size,
                             shuffle=False, num_workers=8)
 
-    # Prepare list of sizes of layers.
-    '''
-    model_size_list = []
-    model_input_size = ((FRAME_CONTEXT_RANGE*2 + 1)*40)
-    model_output_size = 138
-    model_size_list.append(model_input_size)
-    num_hidden_layers = 6   # Must be even.
-    multiplier_factor = [3,2,1,1,0.5,0.5]   # Same length as num_hidden_layers.
-    pre_layer_size = model_input_size
-    for i in multiplier_factor:
-        model_size_list.append(int(pre_layer_size * i))
-        pre_layer_size = int(pre_layer_size * i)
-    model_size_list.append(model_output_size)
-    '''
-
-    #model_size_list = [440, 512, 1024, 1024, 512, 256, 138]    #Frame context = 5
-    #model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]    #Frame context = 8
-    model_size_list = [680, 750, 800, 800, 800, 800, 650, 400, 300, 200, 138]    #Frame context = 8
+    #model_size_list = [440, 512, 1024, 1024, 512, 256, 138]                        #Frame context = 5
+    #model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]                  #Frame context = 8
+    #model_size_list = [680, 750, 800, 800, 800, 800, 650, 400, 300, 200, 138]      #Frame context = 8
+    #model_size_list = [680, 750, 800, 800, 800, 800, 800, 500, 250, 138]           #Frame context = 8
+    model_size_list = [1000, 1200, 1200, 1200, 1200, 1200, 800, 500, 138]           #Frame context = 12
+    # Residual block input at 750 -> 800, 800 -> 800, 800 -> 800
+    residual_blocks_idx = [0, 2]     # Inputs to residual blocks
     #model = SpeechClassifier([40,160,320,640,640,320,240,138])
-    model = SpeechClassifier(model_size_list)
+    model = SpeechClassifier(model_size_list, residual_blocks_idx)
     criterion = nn.CrossEntropyLoss()
     print('='*20)
     print(model)
