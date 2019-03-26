@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+import torch.nn.utils.rnn as rnn
 from torch.utils.data import Dataset as Dataset
 
 SPEECH_DATA_PATH = './../Data'
@@ -25,11 +26,9 @@ class SpeechDataset(Dataset):
 
     def __getitem__(self, idx):
         if self.mode=='test':
-            #return self.data[idx].to(self.device)
             return self.data[idx]
         else:
-            #return self.data[idx].to(self.device), self.labels[idx].to(self.device)
-            return self.data[idx], self.labels[idx]
+            return self.data[idx], (self.labels[idx] + 1)   # Plus 1 because blank_id = 0.
 
     def loadRawData(self):
         if self.mode == 'train' or self.mode == 'dev':
@@ -51,4 +50,6 @@ def SpeechCollateFn(seq_list):
     seq_order = sorted(range(len(lens)), key=lens.__getitem__, reverse=True)
     inputs = [inputs[i] for i in seq_order]
     targets = [targets[i] for i in seq_order]
-    return inputs, targets
+    inp_lens = [len(seq) for seq in inputs]
+    inp_pkd = rnn.pack_sequence(inputs)    # Create packed sequence for rnn.
+    return inp_pkd, inp_lens, targets

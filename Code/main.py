@@ -22,6 +22,7 @@ DEFAULT_RUN_MODE = 'train'
 DEFAULT_FEATURE_SIZE = 40
 DEFAULT_TRAIN_BATCH_SIZE = 64
 DEFAULT_TEST_BATCH_SIZE = 128
+DEFAULT_LABEL_MAP = [" "] + PHONEME_MAP
 
 # Hyperparameters.
 LEARNING_RATE = 1e-2
@@ -60,18 +61,16 @@ def load_weights(model, model_path, device):
     return model
 
 def map_phoneme_string(ph_int):
-    return PHONEME_MAP[ph_int]
+    return DEFAULT_LABEL_MAP[ph_int]
 
 def generate_phoneme_string(batch_pred):
     # Loop over entire batch list of phonemes and convert them to strings.
     batch_strings = []
     for pred in batch_pred:
-        batch_strings.append(''.join(list(map(map_phoneme_string, list(pred.cpu().numpy())))))
+        batch_strings.append(''.join(list(map(map_phoneme_string, list(pred.numpy())))))
     return batch_strings
 
 def calculate_edit_distance(pred, targets):
-    #print('len(pred):', len(pred))
-    #print('len(targets):', len(targets))
     assert len(pred) == len(targets)
     dist = []
     for idx, p in enumerate(pred):
@@ -82,62 +81,53 @@ def val_model(model, val_loader, criterion, decoder, device):
     with torch.no_grad():
         model.eval()
         running_loss = 0.0
-        y_pred = []
-        tar_str = []
+        dist = []
         start_time = time.time()
-        for batch_idx, (inputs, target) in enumerate(val_loader):
-            # Move all inputs and targets to device.
-            for d_idx in range(len(inputs)):
-                inputs[d_idx] = inputs[d_idx].to(device)
-                targets[d_idx] = targets[d_idx].to(device)
-            inp_lens = [len(inp) for inp in inputs]
+        for batch_idx, (inputs, inp_lens, targets) in enumerate(val_loader):
+            targets_cat = (torch.cat(targets)).to(device)
+            inputs = inputs.to(device)
             tar_lens = [len(tar) for tar in targets]    # Do I need to add 1 to each target to account for blank?
-            outputs = model(inputs)
+            outputs = model(inputs, inp_lens)
             # Change shape from (Batch, Max_Seq_L, Features) to (Max_Seq_L, Batch, Features) for CTC Loss.
-            loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), torch.cat(targets), inp_lens, tar_lens)    # CTCLoss only!
+            loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
             running_loss += loss.item()
             # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
             # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
             pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
             # Iterate over each item in batch.
+            y_pred = []
             for i in range(len(inp_lens)):
-                # Pick the first output, most likely.
-                y_pred.append(pad_out[i, 0, :out_lens[i, 0]] - 1)
+                y_pred.append(pad_out[i, 0, :out_lens[i, 0]])   # Pick the first output, most likely.
+            # Calculate the strings for predictions.
+            pred_str = generate_phoneme_string(y_pred)
             # Calculate the strings for targets.
-            tar_str.extend(generate_phoneme_string(targets))
+            tar_str = generate_phoneme_string(targets)
+            # Calculate edit distance between predictions and targets.
+            dist.extend(calculate_edit_distance(pred_str, tar_str))
             print('Validation Iteration: %d/%d Loss = %5.4f' % \
                     (batch_idx+1, len(val_loader), (running_loss/(batch_idx+1))), \
                     end="\r", flush=True)
 
         end_time = time.time()
-        # Calculate the strings for predictions.
-        pred_str = generate_phoneme_string(y_pred)
-        # Calculate edit distance between predictions and targets.
-        dist = calculate_edit_distance(pred_str, tar_str)
-        acc = (sum(dist)/len(dist))*100.0
+        acc = 100.0 - (sum(dist)/len(dist))     # Average over edit distance.
         running_loss /= len(val_loader)
-        print('\nValidation Loss: %5.4f Inv Validation Accuracy: %5.3f Time: %d s' % \
+        print('\nValidation Loss: %5.4f Validation Accuracy: %5.3f Time: %d s' % \
                 (running_loss, acc, end_time - start_time))
         return running_loss, acc
 
 def train_model(model, train_loader, criterion, optimizer, decoder, device):
     model.train()
     running_loss = 0.0
-    y_pred = []
-    tar_str = []
     start_time = time.time()
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
-        # Move all inputs and targets to device.
-        for d_idx in range(len(inputs)):
-            inputs[d_idx] = inputs[d_idx].to(device)
-            targets[d_idx] = targets[d_idx].to(device)
-        inp_lens = [len(inp) for inp in inputs]
-        #print('inp_lens =', inp_lens)
-        tar_lens = [len(tar) for tar in targets]    # Do I need to add 1 to each target to account for blank?
+    dist = []
+    for batch_idx, (inputs, inp_lens, targets) in enumerate(train_loader):
+        targets_cat = (torch.cat(targets)).to(device)
+        inputs = inputs.to(device)
+        tar_lens = [len(tar) for tar in targets]
         optimizer.zero_grad()
-        outputs = model(inputs)
+        outputs = model(inputs, inp_lens)
         # Change shape from (Batch, Max_Seq_L, Features) to (Max_Seq_L, Batch, Features) for CTC Loss.
-        loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), torch.cat(targets), inp_lens, tar_lens)    # CTCLoss only!
+        loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
@@ -145,29 +135,23 @@ def train_model(model, train_loader, criterion, optimizer, decoder, device):
         # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
         pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
         # Iterate over each item in batch.
+        y_pred = []
         for i in range(len(inp_lens)):
             # Pick the first output, most likely.
-            y_pred.append(pad_out[i, 0, :out_lens[i, 0]] - 1)
+            y_pred.append(pad_out[i, 0, :out_lens[i, 0]])
+        # Calculate the strings for predictions.
+        pred_str = generate_phoneme_string(y_pred)
         # Calculate the strings for targets.
-        #print('len(targets):', len(targets))
-        #print('targets[0]:', targets[0])
-        #print('targets[1]:', targets[1])
-        tar_str.extend(generate_phoneme_string(targets))
+        tar_str = generate_phoneme_string(targets)
+        # Calculate edit distance between predictions and targets.
+        dist.extend(calculate_edit_distance(pred_str, tar_str))
         print('Train Iteration: %d/%d Loss = %5.4f' % \
                 (batch_idx+1, len(train_loader), (running_loss/(batch_idx+1))), \
                 end="\r", flush=True)
     end_time = time.time()
-    # Calculate the strings for predictions.
-    pred_str = generate_phoneme_string(y_pred)
-    #print('tar_str=', tar_str)
-    #print('pred_str=', pred_str)
-    # Calculate edit distance between predictions and targets.
-    dist = calculate_edit_distance(pred_str, tar_str)
-    #print('dist:', dist)
-    acc = (sum(dist)/len(dist))*100.0
+    acc = 100.0 - (sum(dist)/len(dist))
     running_loss /= len(train_loader)
-    #print('\nTraining Loss: %5.4f Time: %d s' % (running_loss, end_time - start_time))
-    print('\nTraining Loss: %5.4f Inv Training Accuracy: %5.4f Time: %d s' % (running_loss, acc, end_time - start_time))
+    print('\nTraining Loss: %5.4f Training Accuracy: %5.4f Time: %d s' % (running_loss, acc, end_time - start_time))
     return running_loss
 
 if __name__ == "__main__":
@@ -183,17 +167,6 @@ if __name__ == "__main__":
     # Check for CUDA.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Create the model.
-    input_size = DEFAULT_FEATURE_SIZE
-    vocab_size = len(PHONEME_MAP) + 1   # Plus 1 for blank.
-    hidden_size = 100
-    nlayers = 3
-    model = SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers)
-    model.to(device)
-    print('='*20)
-    print(model)
-    print("Running on device = %s." % (device))
-
     # Create datasets and dataloaders.
     speechTrainDataset = SpeechDataset(mode='train', device=device)
     speechValDataset = SpeechDataset(mode='dev', device=device)
@@ -206,11 +179,22 @@ if __name__ == "__main__":
     test_loader = DataLoader(speechTestDataset, batch_size=args.test_batch_size,
                         shuffle=False, num_workers=4, collate_fn=SpeechCollateFn)
 
+    # Create the model.
+    input_size = DEFAULT_FEATURE_SIZE
+    vocab_size = len(DEFAULT_LABEL_MAP)
+    hidden_size = 100
+    nlayers = 3
+    model = SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers, args.train_batch_size)
+    model.to(device)
+    print('='*20)
+    print(model)
+    print("Running on device = %s." % (device))
+
     # Setup learning parameters.
     criterion = nn.CTCLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma = LEARNING_RATE_DECAY)
-    decoder = ctcdecode.CTCBeamDecoder([' ']+PHONEME_MAP, beam_width=10, log_probs_input=True)
+    decoder = ctcdecode.CTCBeamDecoder(DEFAULT_LABEL_MAP, beam_width=10, log_probs_input=True)
 
     n_epochs = 50
     print('='*20)
@@ -221,9 +205,9 @@ if __name__ == "__main__":
             train_loss = train_model(model, train_loader, criterion, optimizer, decoder, device)
             val_loss, val_acc = val_model(model, val_loader, criterion, decoder, device)
             # Checkpoint the model after each epoch.
-            finalValAcc = '%.3f'%(Val_acc[-1])
+            finalValAcc = '%.3f'%(val_acc)
             model_path = os.path.join(MODEL_PATH, 'model_{}_val_{}.pt'.format(time.strftime("%Y%m%d-%H%M%S"), finalValAcc))
             torch.save(model.state_dict(), model_path)
             print('='*20)
-            if epoch >= WARM_UP_EPOCHS:
+            if (epoch+1) >= WARM_UP_EPOCHS:
                 scheduler.step()
