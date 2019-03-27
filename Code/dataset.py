@@ -22,6 +22,7 @@ class SpeechDataset(Dataset):
         self.feature_size = self.data[0].size(1)
 
     def __len__(self):
+        #return 10
         return len(self.data)
 
     def __getitem__(self, idx):
@@ -45,11 +46,28 @@ class SpeechDataset(Dataset):
 # Modify the batch in collate_fn to sort the
 # batch in decreasing order of size.
 def SpeechCollateFn(seq_list):
-    inputs, targets = zip(*seq_list)
+    if isinstance(seq_list[0], tuple):
+        inputs, targets = zip(*seq_list)
+    else:
+        inputs = seq_list
     lens = [len(seq) for seq in inputs]
     seq_order = sorted(range(len(lens)), key=lens.__getitem__, reverse=True)
-    inputs = [inputs[i] for i in seq_order]
-    targets = [targets[i] for i in seq_order]
+    #print(seq_order)
+    #reorder_seq = np.argsort(seq_order)
+    #print(reorder_seq)
+    #inputs_bak = inputs
+    if isinstance(seq_list[0], tuple):
+        inputs = [inputs[i] for i in seq_order]
+    else:
+        inputs = [inputs[i].type(torch.float32) for i in seq_order]     # RNN does not accept Float64.
+    #print('inputs_bak=', inputs_bak)
+    #print('inputs=', inputs)
+    #reordered_inputs = [inputs[i] for i in reorder_seq]
+    #print('reordered_inputs=', reordered_inputs)
     inp_lens = [len(seq) for seq in inputs]
     inp_pkd = rnn.pack_sequence(inputs)    # Create packed sequence for rnn.
-    return inp_pkd, inp_lens, targets
+    if isinstance(seq_list[0], tuple):
+        targets = [targets[i] for i in seq_order]
+        return inp_pkd, inp_lens, targets
+    else:
+        return inp_pkd, inp_lens, seq_order     # Return seq_order for test data to rearrange later.

@@ -5,6 +5,7 @@ import nltk
 import torch
 import argparse
 import ctcdecode
+import numpy as np
 from phoneme_list import *
 import torch.nn as nn
 import torch.optim as optim
@@ -21,8 +22,9 @@ TEST_RESULT_PATH = './../Results'
 DEFAULT_RUN_MODE = 'train'
 DEFAULT_FEATURE_SIZE = 40
 DEFAULT_TRAIN_BATCH_SIZE = 64
-DEFAULT_TEST_BATCH_SIZE = 128
+DEFAULT_TEST_BATCH_SIZE = 64
 DEFAULT_LABEL_MAP = [" "] + PHONEME_MAP
+DEFAULT_GRADIENT_CLIP = 1
 
 # Hyperparameters.
 LEARNING_RATE = 1e-2
@@ -77,6 +79,46 @@ def calculate_edit_distance(pred, targets):
         dist.append(nltk.edit_distance(p, targets[idx]))
     return dist
 
+def save_test_results(predictions, ensemble=False):
+    predictions_count = list(range(len(predictions)))
+    csv_output = [[i,j] for i,j in zip(predictions_count,predictions)]
+    if not ensemble:
+        result_file_path = os.path.join(TEST_RESULT_PATH,\
+                'result_{}.csv'.format((str.split(str.split(args.model_path, '/')[-1], '.pt')[0])))
+    else:
+        result_file_path = os.path.join(TEST_RESULT_PATH,\
+                'result_ensemble_{}.csv'.format(time.strftime("%Y%m%d-%H%M%S")))
+    with open(result_file_path, mode='w') as csv_file:
+        csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        csv_writer.writerow(['Id', 'Predicted'])
+        csv_writer.writerows(csv_output)
+
+def test_model(model, test_loader, device):
+    with torch.no_grad():
+        model.eval()
+        start_time = time.time()
+        all_predictions = []
+        for batch_idx, (inputs, inp_lens, seq_order) in enumerate(test_loader):
+            inputs = inputs.to(device)
+            outputs = model(inputs, inp_lens)
+            # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
+            # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
+            pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
+            # Iterate over each item in batch.
+            y_pred = []
+            for i in range(len(inp_lens)):
+                y_pred.append(pad_out[i, 0, :out_lens[i, 0]])   # Pick the first output, most likely.
+            # Calculate the strings for predictions.
+            pred_str = generate_phoneme_string(y_pred)
+            reorder_seq = np.argsort(seq_order)
+            pred_str = [pred_str[i] for i in reorder_seq]
+            all_predictions.extend(pred_str)
+            print('Test Iteration: %d/%d' % (batch_idx+1, len(test_loader)), end="\r", flush=True)
+        end_time = time.time()
+        # Save predictions in csv file.
+        save_test_results(all_predictions)
+        print('\nTotal Test Predictions: %d Time: %d s' % (len(all_predictions), end_time - start_time))
+
 def val_model(model, val_loader, criterion, decoder, device):
     with torch.no_grad():
         model.eval()
@@ -129,6 +171,10 @@ def train_model(model, train_loader, criterion, optimizer, decoder, device):
         # Change shape from (Batch, Max_Seq_L, Features) to (Max_Seq_L, Batch, Features) for CTC Loss.
         loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
         loss.backward()
+
+        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+        #  torch.nn.utils.clip_grad_norm_(model.parameters(), DEFAULT_GRADIENT_CLIP)
+
         optimizer.step()
         running_loss += loss.item()
         # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
@@ -182,9 +228,27 @@ if __name__ == "__main__":
     # Create the model.
     input_size = DEFAULT_FEATURE_SIZE
     vocab_size = len(DEFAULT_LABEL_MAP)
+
+    # Model_1 -> SpeechRecognizer
+    # hidden_size = 100
+    # nlayers = 3
+    # bidirectional = False
+    # dropout = 0
+
+    # Model_2 -> SpeechRecognizer
     hidden_size = 100
     nlayers = 3
-    model = SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers, args.train_batch_size)
+    bidirectional = True
+    dropout = 0
+
+    # Model_3 -> SpeechRecognizer -> Gives nan loss.
+    # hidden_size = 100
+    # nlayers = 3
+    # bidirectional = True
+    # dropout = 0.3
+
+    model = SpeechRecognizer(input_size, hidden_size, vocab_size,
+                            nlayers, args.train_batch_size, bidirectional, dropout)
     model.to(device)
     print('='*20)
     print(model)
@@ -195,6 +259,9 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma = LEARNING_RATE_DECAY)
     decoder = ctcdecode.CTCBeamDecoder(DEFAULT_LABEL_MAP, beam_width=10, log_probs_input=True)
+
+    if args.model_path != None:
+        model = load_weights(model, args.model_path, device)
 
     n_epochs = 50
     print('='*20)
@@ -211,3 +278,7 @@ if __name__ == "__main__":
             print('='*20)
             if (epoch+1) >= WARM_UP_EPOCHS:
                 scheduler.step()
+    else:
+        # Only testing the model.
+        test_model(model, test_loader, device)
+        print('='*20)
