@@ -35,6 +35,8 @@ WARM_UP_EPOCHS = 3
 # Model Ensembles Parameters
 MODEL_1_PARAMS = (DEFAULT_FEATURE_SIZE, 100, len(DEFAULT_LABEL_MAP), 3, DEFAULT_TEST_BATCH_SIZE, False, 0.0)    #SpeechRecognizer
 MODEL_2_PARAMS = (DEFAULT_FEATURE_SIZE, 100, len(DEFAULT_LABEL_MAP), 3, DEFAULT_TEST_BATCH_SIZE, True, 0.0)     #SpeechRecognizer
+MODEL_4_PARAMS = (DEFAULT_FEATURE_SIZE, 256, len(DEFAULT_LABEL_MAP), 3, DEFAULT_TEST_BATCH_SIZE, True, 0.0)     #SpeechRecognizer
+
 MODEL1_1 = './../Models/Model_1/model_20190326-173252_val_77.725.pt'
 MODEL1_2 = './../Models/Model_1/model_20190326-174258_val_78.036.pt'
 MODEL1_3 = './../Models/Model_1/model_20190326-175301_val_78.080.pt'
@@ -46,6 +48,12 @@ MODEL2_2 = './../Models/Model_2/model_20190327-162036_val_84.113.pt'
 MODEL2_3 = './../Models/Model_2/model_20190327-163152_val_84.071.pt'
 MODEL2_4 = './../Models/Model_2/model_20190327-164320_val_84.099.pt'
 MODEL2_5 = './../Models/Model_2/model_20190327-165450_val_84.100.pt'
+
+MODEL4_1 = './../Models/Model_4/model_20190328-024707_val_85.778.pt'
+MODEL4_2 = './../Models/Model_4/model_20190328-025924_val_86.616.pt'
+MODEL4_3 = './../Models/Model_4/model_20190328-031148_val_86.628.pt'
+MODEL4_4 = './../Models/Model_4/model_20190328-032420_val_86.631.pt'
+MODEL4_5 = './../Models/Model_4/model_20190328-033642_val_86.631.pt'
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Training/testing for Speech Recognition.')
@@ -119,11 +127,13 @@ def test_model_ensemble(model, test_loader, decoder, device):
             inputs = inputs.to(device)
             outputs = []
             for idx, m in enumerate(models):
-                outputs.append(m(inputs, inp_lens))
+                #outputs.append(m(inputs, inp_lens))
+                outputs.append(F.log_softmax(m(inputs, inp_lens), dim=2))
             # Take mean of probabilities from each model.
             outputs = torch.mean(torch.stack(outputs), dim=0)
             # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
             # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
+            #pad_out, _, _, out_lens = decoder.decode(F.log_softmax(outputs, dim=2), torch.tensor(inp_lens))
             pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
             # Iterate over each item in batch.
             y_pred = []
@@ -151,7 +161,7 @@ def test_model(model, test_loader, decoder, device):
             outputs = model(inputs, inp_lens)
             # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
             # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
-            pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
+            pad_out, _, _, out_lens = decoder.decode(F.log_softmax(outputs, dim=2), torch.tensor(inp_lens))
             # Iterate over each item in batch.
             y_pred = []
             for i in range(len(inp_lens)):
@@ -183,16 +193,18 @@ def val_model_ensemble(models, val_loader, criterion, decoder, device):
             outputs = []
             loss = 0
             for idx, m in enumerate(models):
-                outputs.append(m(inputs, inp_lens))
-                print(outputs[idx].shape)
+                #outputs.append(m(inputs, inp_lens))
+                outputs.append(F.log_softmax(m(inputs, inp_lens), dim=2))
                 # Change shape from (Batch, Max_Seq_L, Dict) to (Max_Seq_L, Batch, Dict) for CTC Loss.
-                loss += criterion(F.log_softmax(outputs[idx], dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
+                #loss += criterion(F.log_softmax(outputs[idx], dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
+                loss += criterion(outputs[idx].permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
             loss = loss/(len(models))
             running_loss += loss.item()
             # Take mean of probabilities from each model.
             outputs = torch.mean(torch.stack(outputs), dim=0)
             # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
             # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
+            #pad_out, _, _, out_lens = decoder.decode(F.log_softmax(outputs, dim=2), torch.tensor(inp_lens))
             pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
             # Iterate over each item in batch.
             y_pred = []
@@ -230,7 +242,7 @@ def val_model(model, val_loader, criterion, decoder, device):
             running_loss += loss.item()
             # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
             # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
-            pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
+            pad_out, _, _, out_lens = decoder.decode(F.log_softmax(outputs, dim=2), torch.tensor(inp_lens))
             # Iterate over each item in batch.
             y_pred = []
             for i in range(len(inp_lens)):
@@ -263,7 +275,6 @@ def train_model(model, train_loader, criterion, optimizer, decoder, device):
         tar_lens = [len(tar) for tar in targets]
         optimizer.zero_grad()
         outputs = model(inputs, inp_lens)
-        print(outputs.shape)
         # Change shape from (Batch, Max_Seq_L, Dict) to (Max_Seq_L, Batch, Dict) for CTC Loss.
         loss = criterion(F.log_softmax(outputs, dim=2).permute(1,0,2), targets_cat, inp_lens, tar_lens)    # CTCLoss only!
         loss.backward()
@@ -275,7 +286,8 @@ def train_model(model, train_loader, criterion, optimizer, decoder, device):
         running_loss += loss.item()
         # pad_out: Batch, Beam_Size, Max_Seq_L -> 'Beam_Size' predictions for each item in batch.
         # out_lens: Batch, Beam_Size -> Actual length of each prediction for each item in batch.
-        pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
+        #pad_out, _, _, out_lens = decoder.decode(outputs, torch.tensor(inp_lens))
+        pad_out, _, _, out_lens = decoder.decode(F.log_softmax(outputs, dim=2), torch.tensor(inp_lens))
         # Iterate over each item in batch.
         y_pred = []
         for i in range(len(inp_lens)):
@@ -322,19 +334,25 @@ if __name__ == "__main__":
                         shuffle=False, num_workers=4, collate_fn=SpeechCollateFn)
 
     if args.model_ensemble:
-        num_model_1 = 3
-        num_model_2 = 3
+        num_model_1 = 0
+        num_model_2 = 0
+        num_model_4 = 5
         model_paths = [
             #MODEL1_1,
-            MODEL1_2,
-            MODEL1_3,
-            MODEL1_4,
+            #MODEL1_2,
+            #MODEL1_3,
+            #MODEL1_4,
             #MODEL1_5,
             #MODEL2_1,
-            MODEL2_2,
-            MODEL2_3,
-            MODEL2_4
+            #MODEL2_2,
+            #MODEL2_3,
+            #MODEL2_4
             #MODEL2_5
+            MODEL4_1,
+            MODEL4_2,
+            MODEL4_3,
+            MODEL4_4,
+            MODEL4_5
         ]
         models = []
         input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout = MODEL_1_PARAMS
@@ -342,6 +360,9 @@ if __name__ == "__main__":
             models += [SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout)]
         input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout = MODEL_2_PARAMS
         for i in range(num_model_2):
+            models += [SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout)]
+        input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout = MODEL_4_PARAMS
+        for i in range(num_model_4):
             models += [SpeechRecognizer(input_size, hidden_size, vocab_size, nlayers, batch_size, bidirectional, dropout)]
         # Load all models.
         for idx, m in enumerate(models):
@@ -359,16 +380,22 @@ if __name__ == "__main__":
         # dropout = 0
 
         # Model_2 -> SpeechRecognizer
-        hidden_size = 100
-        nlayers = 3
-        bidirectional = True
-        dropout = 0
+        # hidden_size = 100
+        # nlayers = 3
+        # bidirectional = True
+        # dropout = 0
 
         # Model_3 -> SpeechRecognizer -> Gives nan loss.
         # hidden_size = 100
         # nlayers = 3
         # bidirectional = True
         # dropout = 0.3
+
+        # Model_4 -> SpeechRecognizer
+        hidden_size = 256
+        nlayers = 3
+        bidirectional = True
+        dropout = 0
 
         model = SpeechRecognizer(input_size, hidden_size, vocab_size,
                                 nlayers, args.train_batch_size, bidirectional, dropout)
