@@ -61,7 +61,7 @@ class CnnBlock(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-# Variational dropout.
+# Locked dropout.
 # Borrowed from Gal and Ghahramani / Merity
 # https://medium.com/@bingobee01/a-review-of-dropout-as-applied-to-rnns-72e79ecd5b7b
 class LockedDropout(nn.Module):
