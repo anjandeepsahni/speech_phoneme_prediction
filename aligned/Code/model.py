@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 
 class SpeechClassifier(nn.Module):
-    def __init__(self, size_list, residual_blocks_idx):     #FIXME: Add params here regarding model size.
+    def __init__(self, size_list, residual_blocks_idx):
         super(SpeechClassifier, self).__init__()
         layers = []
         self.size_list = size_list

@@ -21,10 +21,11 @@ DEFAULT_TEST_BATCH_SIZE = 200
 
 # Hyperparameters.
 #LEARNING_RATE = 0.001
-LEARNING_RATE = 0.002   #Trying batchnorm.
+LEARNING_RATE = 0.002           #Trying batchnorm.
 LEARNING_RATE_STEP = 0.7
-FRAME_CONTEXT_RANGE = 12     # On each side.
+FRAME_CONTEXT_RANGE = 12        # On each side.
 
+# Saves test results to csv file for kaggle submission.
 def save_test_results(predictions):
     predictions = list(predictions.cpu().numpy())
     predictions_count = list(range(len(predictions)))
@@ -139,14 +140,15 @@ if __name__ == "__main__":
     val_loader = DataLoader(speechValDataset, batch_size=args.train_batch_size,
                             shuffle=False, num_workers=8)
 
+    # Previously tested models.
     #model_size_list = [440, 512, 1024, 1024, 512, 256, 138]                        #Frame context = 5
     #model_size_list = [680, 800, 1024, 1200, 1200, 800, 512, 138]                  #Frame context = 8
     #model_size_list = [680, 750, 800, 800, 800, 800, 650, 400, 300, 200, 138]      #Frame context = 8
     #model_size_list = [680, 750, 800, 800, 800, 800, 800, 500, 250, 138]           #Frame context = 8
+    # Working model.
     model_size_list = [1000, 1200, 1200, 1200, 1200, 1200, 800, 500, 138]           #Frame context = 12
     # Residual block input at 750 -> 800, 800 -> 800, 800 -> 800
     residual_blocks_idx = [0, 2]     # Inputs to residual blocks
-    #model = SpeechClassifier([40,160,320,640,640,320,240,138])
     model = SpeechClassifier(model_size_list, residual_blocks_idx)
     criterion = nn.CrossEntropyLoss()
     print('='*20)

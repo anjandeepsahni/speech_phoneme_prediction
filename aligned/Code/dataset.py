@@ -1,9 +1,9 @@
 import os
 import torch
 import numpy as np
+from bisect import bisect_left
 from torch.utils.data import Dataset as Dataset
 import torch.utils.data.dataloader as dataloader
-from bisect import bisect_left
 
 SPEECH_DATA_PATH = './../Data'
 

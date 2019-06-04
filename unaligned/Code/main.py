@@ -11,7 +11,6 @@ import torch.nn as nn
 from phoneme_list import *
 import torch.optim as optim
 import torch.nn.functional as F
-#from warpctc_pytorch import CTCLoss
 from torch.utils.data import DataLoader
 from dataset import SpeechDataset, SpeechCollateFn
 from model import SpeechRecognizer, SpeechRecognizer2
@@ -29,9 +28,7 @@ DEFAULT_LABEL_MAP = [' '] + PHONEME_MAP
 
 # Hyperparameters.
 LEARNING_RATE = 1e-3
-LEARNING_RATE_DECAY = 0.1
 WEIGHT_DECAY = 1.2e-6
-WARM_UP_EPOCHS = 3
 GRADIENT_CLIP = 0.25
 DROPOUT = 0.4       # For RNN output.
 DROPOUT_H = 0.3     # For RNN hidden.
@@ -48,9 +45,11 @@ def parse_args():
     parser.add_argument('--model_ensemble', type=bool, default=False, help='True/false, if we have to model ensembling.')
     return parser.parse_args()
 
+# Maps a phoneme index to string.
 def map_phoneme_string(ph_int):
     return DEFAULT_LABEL_MAP[ph_int]
 
+# Generates phoneme string for entire batch of predictions.
 def generate_phoneme_string(batch_pred):
     # Loop over entire batch list of phonemes and convert them to strings.
     batch_strings = []
@@ -58,6 +57,7 @@ def generate_phoneme_string(batch_pred):
         batch_strings.append(''.join(list(map(map_phoneme_string, list(pred.numpy())))))
     return batch_strings
 
+# For calculating Edit/Levenshtein distance.
 def calculate_edit_distance(pred, targets):
     assert len(pred) == len(targets)
     dist = []
@@ -65,6 +65,7 @@ def calculate_edit_distance(pred, targets):
         dist.append(nltk.edit_distance(p, targets[idx]))
     return dist
 
+# Saves test results to csv file for kaggle submission.
 def save_test_results(predictions, ensemble=False):
     predictions_count = list(range(len(predictions)))
     csv_output = [[i,j] for i,j in zip(predictions_count,predictions)]
@@ -204,9 +205,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Create datasets and dataloaders.
-    speechTrainDataset = SpeechDataset(mode='train', device=device)
-    speechValDataset = SpeechDataset(mode='dev', device=device)
-    speechTestDataset = SpeechDataset(mode='test', device=device)
+    speechTrainDataset = SpeechDataset(mode='train')
+    speechValDataset = SpeechDataset(mode='dev')
+    speechTestDataset = SpeechDataset(mode='test')
 
     train_loader = DataLoader(speechTrainDataset, batch_size=args.train_batch_size,
                                 shuffle=True, num_workers=4, collate_fn=SpeechCollateFn)
@@ -219,6 +220,9 @@ if __name__ == "__main__":
     input_size = DEFAULT_FEATURE_SIZE
     vocab_size = len(DEFAULT_LABEL_MAP)
 
+    #---------------------------#
+    # Previously tested models.
+    #---------------------------#
     # Model_1 -> SpeechRecognizer
     # hidden_size = 100
     # nlayers = 3
@@ -249,6 +253,9 @@ if __name__ == "__main__":
     # bidirectional = True
     # dropout = 0
 
+    #---------------------------#
+    # Working model.
+    #---------------------------#
     # Model_6 -> SpeechRecognizer2
     rnn_type = 'lstm'
     hidden_size = 384
@@ -293,4 +300,4 @@ if __name__ == "__main__":
     else:
         # Only testing the model.
         test_model(model, test_loader, decoder, device)
-    print('='*20)
+        print('='*20)

@@ -7,10 +7,9 @@ from torch.utils.data import Dataset as Dataset
 SPEECH_DATA_PATH = './../Data'
 
 class SpeechDataset(Dataset):
-    def __init__(self, mode='train', device="cpu"):
+    def __init__(self, mode='train'):
         # Check for valid mode.
         self.mode = mode
-        self.device = device
         valid_modes = {'train', 'dev', 'test'}
         if self.mode not in valid_modes:
             raise ValueError("SpeechDataset Error: Mode must be one of %r." % valid_modes)

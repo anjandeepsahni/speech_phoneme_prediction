@@ -1,9 +1,9 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from phoneme_list import *
 import torch.nn.utils.rnn as rnn
 from torch.autograd import Variable
-from phoneme_list import *
 
 #RNN only.
 class SpeechRecognizer(nn.Module):

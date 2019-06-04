@@ -1,3 +1,0 @@
-scp -v -i "~/Documents/Do Not Touch/aws_key.pem" ubuntu@ec2-13-58-226-180.us-east-2.compute.amazonaws.com:~/sahni/HW3P2/Models/model_20190331-071635_val_7.740.pt "/Users/sahni/Documents/Code/github_repos/CMUCourseWork/11785/HW3-Part2/Models/"
-#scp -v -i "~/Documents/Do Not Touch/aws_key.pem" ubuntu@ec2-13-58-226-180.us-east-2.compute.amazonaws.com:~/sahni/HW3P2/Results/result_model_20190331-073530_val_7.096.csv "/Users/sahni/Documents/Code/github_repos/CMUCourseWork/11785/HW3-Part2/Results/"
-#scp -v -i "~/Documents/Do Not Touch/aws_key.pem" ubuntu@ec2-13-58-226-180.us-east-2.compute.amazonaws.com:~/sahni/HW3P2/git_repo/inessus/weights/028_7.6384.w "/Users/sahni/Documents/Code/github_repos/CMUCourseWork/11785/HW3-Part2/Models/"
